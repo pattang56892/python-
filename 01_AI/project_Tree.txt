@@ -1,0 +1,9 @@
+# project Tree
+
+project_root/
+├── train.py                 # Main training script
+├── utils/
+│   └── data_loader.py      # Data loading utilities
+├── models/                 # Model definitions
+├── config/                 # Configuration files
+└── data/                   # Local data directory
