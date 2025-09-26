@@ -143,6 +143,71 @@ def load_pattern(pattern_name):
     }
     return patterns.get(pattern_name.lower(), [])
 
+def validate_pattern_data(pattern):
+    """Validate that pattern data is properly formatted"""
+    if not pattern:
+        return False, "Pattern is empty or None"
+    if not isinstance(pattern, list):
+        return False, "Pattern must be a list of rows"
+    if len(pattern) == 0:
+        return False, "Pattern has no rows"
+    
+    row_length = len(pattern[0])
+    for i, row in enumerate(pattern):
+        if not isinstance(row, list):
+            return False, f"Row {i} is not a list"
+        if len(row) != row_length:
+            return False, f"Row {i} has inconsistent length ({len(row)} vs {row_length})"
+        for j, cell in enumerate(row):
+            if cell not in (0, 1):
+                return False, f"Cell at ({i},{j}) is not 0 or 1: {cell}"
+    return True, "Pattern is valid"
+
+def verify_pattern_placement(original_grid, new_grid, pattern, start_row, start_col):
+    """Verify pattern was correctly placed on grid"""
+    rows, cols = len(original_grid), len(original_grid[0])
+    pattern_rows, pattern_cols = len(pattern), len(pattern[0])
+    
+    for i in range(pattern_rows):
+        for j in range(pattern_cols):
+            grid_row = (start_row + i) % rows
+            grid_col = (start_col + j) % cols
+            expected = pattern[i][j]
+            actual = new_grid[grid_row][grid_col]
+            if actual != expected:
+                return False, f"Mismatch at grid({grid_row},{grid_col}): expected {expected}, got {actual}"
+    return True, "Pattern placement verified"
+
+def safe_load_and_place_pattern(grid, pattern_name, start_row=None, start_col=None):
+    """
+    Load and place a pattern with full validation.
+    Returns (success: bool, message: str, new_grid or None)
+    """
+    pattern = load_pattern(pattern_name)
+    if not pattern:
+        return False, f"Pattern '{pattern_name}' not found", None
+
+    is_valid, msg = validate_pattern_data(pattern)
+    if not is_valid:
+        return False, f"Invalid pattern '{pattern_name}': {msg}", None
+
+    rows, cols = len(grid), len(grid[0])
+    p_rows, p_cols = len(pattern), len(pattern[0])
+
+    if p_rows > rows or p_cols > cols:
+        return False, f"Pattern {p_rows}x{p_cols} too large for grid {rows}x{cols}", None
+
+    if start_row is None:
+        start_row = (rows - p_rows) // 2
+    if start_col is None:
+        start_col = (cols - p_cols) // 2
+
+    new_grid = place_pattern(grid, pattern, start_row, start_col)
+    is_placed, msg = verify_pattern_placement(grid, new_grid, pattern, start_row, start_col)
+    if not is_placed:
+        return False, f"Placement verification failed: {msg}", None
+
+    return True, f"Pattern '{pattern_name}' loaded successfully", new_grid
 def place_pattern(grid, pattern, start_row, start_col):
     """Place a pattern on the grid at specified position with wrapping"""
     if not pattern:
@@ -743,11 +808,9 @@ def run_terminal_version():
             elif key == 'p':
                 pattern_name = show_pattern_menu()
                 if pattern_name:
-                    pattern = load_pattern(pattern_name)
-                    if pattern:
-                        start_row = (rows - len(pattern)) // 2
-                        start_col = (cols - len(pattern[0])) // 2
-                        grid = place_pattern(grid, pattern, start_row, start_col)
+                    success, message, new_grid = safe_load_and_place_pattern(grid, pattern_name)
+                    if success:
+                        grid = new_grid
                         generation = 0
                         history = [grid]
                         history_pos = 0
@@ -1040,11 +1103,9 @@ def run_gui_version():
             tk.Button(dialog, text="Cancel", command=dialog.destroy, bg='#F44336', fg='white').pack(pady=10)
             dialog.wait_window()
             if selected_pattern[0]:
-                pattern = load_pattern(selected_pattern[0])
-                if pattern:
-                    start_row = (self.rows - len(pattern)) // 2
-                    start_col = (self.cols - len(pattern[0])) // 2
-                    self.grid = place_pattern(self.grid, pattern, start_row, start_col)
+                success, message, new_grid = safe_load_and_place_pattern(self.grid, selected_pattern[0])
+                if success:
+                    self.grid = new_grid
                     self.generation = 0
                     self.history = [[row[:] for row in self.grid]]
                     self.history_pos = 0
@@ -1053,8 +1114,7 @@ def run_gui_version():
                     self.stats.update(self.grid, self.generation)
                     self.update_display()
                     messagebox.showinfo("Pattern Loaded", 
-                                      f"🎭 {selected_pattern[0].replace('_', ' ').title()} loaded successfully!")
-
+                                    f"🎭 {selected_pattern[0].replace('_', ' ').title()} loaded successfully!")
         def select_pattern(self, pattern_name, selected_pattern, dialog):
             selected_pattern[0] = pattern_name
             dialog.destroy()
